@@ -1,0 +1,69 @@
+# Bank Statement Analyser theme - professional fintech palette, matches the
+# Underwriting Intelligence Platform's other tools in spirit (restrained,
+# data-dense) without copying CIBIL_EXCEL's bare default-theme + ad hoc CSS.
+# Both light and dark variants are defined so the in-app theme switcher works
+# rather than locking to one mode. Non-color options (typography, radius,
+# border visibility) are mode-independent and live in the shared [theme]
+# block; only values that actually need to differ by mode go under
+# [theme.light] / [theme.dark].
+
+[theme]
+showWidgetBorder = true
+showSidebarBorder = true
+baseRadius = "8px"
+buttonRadius = "8px"
+
+font = "'Inter':https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+headingFont = "'Inter':https://fonts.googleapis.com/css2?family=Inter:wght@600;700&display=swap"
+codeFont = "'JetBrains Mono':https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap"
+baseFontSize = 15
+baseFontWeight = 400
+headingFontSizes = ["26px", "21px", "18px", "16px", "14px", "13px"]
+headingFontWeights = [700, 600, 600, 600, 500, 500]
+linkUnderline = false
+chartCategoricalColors = ["#2563EB", "#16A34A", "#7C3AED", "#DC2626", "#CA8A04", "#0EA5E9", "#64748B", "#EA580C"]
+
+[theme.light]
+# Amber accent + navy text on white, matching the digitap.ai bank-statement
+# product page reference (see frontend.md) - warm CTA colour instead of the
+# generic fintech blue, everything else (backgrounds, borders) unchanged.
+primaryColor = "#F59E0B"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F3F6FB"
+textColor = "#1E293B"
+linkColor = "#F59E0B"
+borderColor = "#E2E8F0"
+codeBackgroundColor = "#F3F6FB"
+codeTextColor = "#1E293B"
+
+greenColor = "#16A34A"
+redColor = "#DC2626"
+yellowColor = "#CA8A04"
+orangeColor = "#EA580C"
+blueColor = "#2563EB"
+violetColor = "#7C3AED"
+grayColor = "#64748B"
+
+dataframeBorderColor = "#E2E8F0"
+dataframeHeaderBackgroundColor = "#F3F6FB"
+
+[theme.dark]
+primaryColor = "#FBBF24"
+backgroundColor = "#0F172A"
+secondaryBackgroundColor = "#1E293B"
+textColor = "#F1F5F9"
+linkColor = "#FBBF24"
+borderColor = "#334155"
+codeBackgroundColor = "#1E293B"
+codeTextColor = "#CBD5E1"
+
+greenColor = "#34D399"
+redColor = "#F87171"
+yellowColor = "#FBBF24"
+orangeColor = "#FB923C"
+blueColor = "#60A5FA"
+violetColor = "#A78BFA"
+grayColor = "#94A3B8"
+
+dataframeBorderColor = "#334155"
+dataframeHeaderBackgroundColor = "#1E293B"

@@ -1,0 +1,39 @@
+/*
+ * tokens.css - design tokens as CSS custom properties, matching
+ * frontend.md's Color table exactly (which itself matches the Streamlit
+ * POC's .streamlit/config.toml) so the React build and the Streamlit tool
+ * never visually disagree. Light is the default; dark overrides live under
+ * a `.dark` class toggle on <html>.
+ *
+ * Stored as space-separated RGB channels (not hex) so Tailwind's opacity
+ * modifiers (`bg-accent/10`) can composite alpha via `rgb(var(--x) / <a>)` -
+ * see tailwind.config.ts's color definitions.
+ */
+
+:root {
+  --ink: 30 41 59; /* #1E293B */
+  --accent: 245 158 11; /* #F59E0B */
+  --paper: 255 255 255; /* #FFFFFF */
+  --surface: 243 246 251; /* #F3F6FB */
+  --border: 226 232 240; /* #E2E8F0 */
+  --muted: 100 116 139; /* #64748B */
+
+  --good: 26 127 78; /* #1A7F4E */
+  --warn: 154 107 0; /* #9A6B00 */
+  --critical: 179 38 30; /* #B3261E */
+  --info: 62 92 118; /* #3E5C76 */
+}
+
+.dark {
+  --ink: 241 245 249; /* #F1F5F9 */
+  --accent: 251 191 36; /* #FBBF24 */
+  --paper: 15 23 42; /* #0F172A */
+  --surface: 30 41 59; /* #1E293B */
+  --border: 51 65 85; /* #334155 */
+  --muted: 148 163 184; /* #94A3B8 */
+
+  --good: 74 222 156; /* #4ADE9C */
+  --warn: 242 184 75; /* #F2B84B */
+  --critical: 255 107 94; /* #FF6B5E */
+  --info: 127 168 201; /* #7FA8C9 */
+}

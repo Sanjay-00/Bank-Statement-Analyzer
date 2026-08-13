@@ -1,0 +1,11 @@
+.BS/
+.venv/
+venv/
+__pycache__/
+*.pyc
+.env
+Sample Data/
+*.xlsx
+.claude/
+bash.exe.stackdump
+data/bank_config_learned.json
