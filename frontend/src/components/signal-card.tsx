@@ -29,7 +29,7 @@ export function SignalCard({ flag }: { flag: Flag }) {
       animate={{ opacity: 1, y: 0 }}
       whileHover={{ y: -2 }}
       transition={{ duration: 0.3 }}
-      className={`border border-border border-l-[3px] rounded-lg p-4 shadow-[0_1px_3px_rgb(var(--ink)/0.05)] hover:shadow-[0_8px_22px_rgb(var(--ink)/0.08)] transition-shadow ${TINT[flag.severity]}`}
+      className={`border border-border border-l-[3px] rounded-lg p-4 shadow-card hover:shadow-card-hover transition-shadow ${TINT[flag.severity]}`}
     >
       <div className="flex items-center justify-between gap-3 mb-1.5">
         <span className="font-semibold text-sm">{titleCase(flag.code)}</span>

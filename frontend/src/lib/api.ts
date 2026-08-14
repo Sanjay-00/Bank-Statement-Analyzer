@@ -32,17 +32,25 @@ async function parseErrorDetail(resp: Response): Promise<{ errorCode: string; me
   }
 }
 
-export async function analyzeStatement(file: File, password?: string): Promise<AnalysisResponse> {
+function buildStatementForm(file: File, password?: string): FormData {
   const form = new FormData();
   form.append("file", file);
   if (password) form.append("password", password);
+  return form;
+}
 
-  const resp = await fetch(`${API_BASE}/api/analyze`, { method: "POST", body: form });
-
+/** POSTs the statement file to `path`, throwing ApiError on a non-2xx response. */
+async function postStatement(path: string, file: File, password?: string): Promise<Response> {
+  const resp = await fetch(`${API_BASE}${path}`, { method: "POST", body: buildStatementForm(file, password) });
   if (!resp.ok) {
     const { errorCode, message } = await parseErrorDetail(resp);
     throw new ApiError(resp.status, errorCode, message);
   }
+  return resp;
+}
+
+export async function analyzeStatement(file: File, password?: string): Promise<AnalysisResponse> {
+  const resp = await postStatement("/api/analyze", file, password);
 
   const json = await resp.json();
   const parsed = AnalysisResponseSchema.safeParse(json);
@@ -55,16 +63,7 @@ export async function analyzeStatement(file: File, password?: string): Promise<A
 }
 
 export async function downloadExcel(file: File, password?: string): Promise<void> {
-  const form = new FormData();
-  form.append("file", file);
-  if (password) form.append("password", password);
-
-  const resp = await fetch(`${API_BASE}/api/analyze/excel`, { method: "POST", body: form });
-
-  if (!resp.ok) {
-    const { message } = await parseErrorDetail(resp);
-    throw new Error(message);
-  }
+  const resp = await postStatement("/api/analyze/excel", file, password);
 
   const disposition = resp.headers.get("content-disposition") ?? "";
   const match = disposition.match(/filename="?([^"]+)"?/);

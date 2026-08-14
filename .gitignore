@@ -9,3 +9,5 @@ Sample Data/
 .claude/
 bash.exe.stackdump
 data/bank_config_learned.json
+frontend.md
+plan.md

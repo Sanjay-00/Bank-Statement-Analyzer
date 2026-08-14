@@ -19,7 +19,7 @@ export function DueDateCard({ rec }: { rec: Recommendation }) {
       whileHover={{ y: -2 }}
       transition={{ duration: 0.3, delay: (rec.priority - 1) * 0.06 }}
       className={[
-        "rounded-md p-4 flex flex-col gap-1 border shadow-[0_1px_2px_rgb(var(--ink)/0.04)] hover:shadow-[0_6px_18px_rgb(var(--ink)/0.08)] transition-shadow",
+        "rounded-md p-4 flex flex-col gap-1 border shadow-card hover:shadow-card-hover transition-shadow",
         isTop ? "border-accent bg-accent/[0.06]" : "border-border bg-surface",
       ].join(" ")}
     >

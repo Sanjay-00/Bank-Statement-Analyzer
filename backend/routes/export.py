@@ -9,12 +9,12 @@ two frontends can never drift in report output.
 
 from typing import Optional
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, UploadFile
 from fastapi.responses import Response
 
 from engine.excel_generator import generate_excel, get_filename
-from engine.parser import LockedPDFError
-from engine.statement import analyze
+
+from ..upload import analyze_upload
 
 router = APIRouter(tags=["export"])
 
@@ -26,35 +26,7 @@ async def export_excel(
     file: UploadFile = File(...),
     password: Optional[str] = Form(default=None),
 ) -> Response:
-    if not file.filename or not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(
-            status_code=400,
-            detail={"error_code": "NOT_A_PDF", "message": "Only PDF files are supported."},
-        )
-
-    file_bytes = await file.read()
-    if not file_bytes:
-        raise HTTPException(
-            status_code=400,
-            detail={"error_code": "EMPTY_FILE", "message": "The uploaded file is empty."},
-        )
-
-    try:
-        result = analyze(file_bytes, password=password)
-    except LockedPDFError:
-        raise HTTPException(
-            status_code=422,
-            detail={
-                "error_code": "LOCKED_PDF",
-                "message": "This statement is password-protected and the "
-                           "supplied password (if any) didn't unlock it.",
-            },
-        )
-    except Exception as exc:  # noqa: BLE001 - genuinely unreadable/corrupt PDF, not a code bug
-        raise HTTPException(
-            status_code=400,
-            detail={"error_code": "UNREADABLE_FILE", "message": f"Couldn't read this PDF: {exc}"},
-        )
+    result = await analyze_upload(file, password)
 
     excel_bytes = generate_excel(result)
     filename = get_filename(result.bank_name, result.account_holder)

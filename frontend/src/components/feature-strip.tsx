@@ -42,7 +42,7 @@ export function FeatureStrip() {
           viewport={{ once: true, margin: "-40px" }}
           transition={{ duration: 0.4, delay: i * 0.06, ease: "easeOut" }}
           whileHover={{ y: -3 }}
-          className="rounded-xl border border-border bg-paper p-5 shadow-[0_1px_3px_rgb(var(--ink)/0.05)] hover:shadow-[0_8px_24px_rgb(var(--ink)/0.08)] hover:border-accent/30 transition-shadow"
+          className="rounded-xl border border-border bg-paper p-5 shadow-card hover:shadow-[0_8px_24px_rgb(var(--ink)/0.08)] hover:border-accent/30 transition-shadow"
         >
           <div className="h-10 w-10 rounded-lg bg-accent/12 text-accent grid place-items-center mb-3.5">
             <f.icon className="h-5 w-5" />

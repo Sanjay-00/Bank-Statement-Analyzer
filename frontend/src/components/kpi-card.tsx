@@ -37,7 +37,7 @@ export function KpiCard({ label, value, signal, countFrom, format, help }: KpiCa
       animate={{ opacity: 1, y: 0 }}
       whileHover={{ y: -2 }}
       transition={{ duration: 0.3 }}
-      className="bg-surface rounded-lg p-4 flex flex-col gap-1 border border-border/60 shadow-[0_1px_2px_rgb(var(--ink)/0.04)] hover:shadow-[0_6px_18px_rgb(var(--ink)/0.07)] transition-shadow"
+      className="bg-surface rounded-lg p-4 flex flex-col gap-1 border border-border/60 shadow-card hover:shadow-card-hover transition-shadow"
       style={signal ? { borderLeft: `3px solid ${SIGNAL_COLOR[signal]}` } : undefined}
     >
       <div className="flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted">

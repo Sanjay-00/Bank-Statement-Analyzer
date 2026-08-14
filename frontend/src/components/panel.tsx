@@ -16,7 +16,7 @@ export function Panel({ children, className = "" }: { children: ReactNode; class
       animate={{ opacity: 1, y: 0 }}
       whileHover={{ y: -2 }}
       transition={{ duration: 0.35, ease: "easeOut" }}
-      className={`bg-surface rounded-xl border border-border/60 p-6 shadow-[0_1px_3px_rgb(var(--ink)/0.05)] hover:shadow-[0_10px_30px_rgb(var(--ink)/0.08)] transition-shadow ${className}`}
+      className={`bg-surface rounded-xl border border-border/60 p-6 shadow-card hover:shadow-[0_10px_30px_rgb(var(--ink)/0.08)] transition-shadow ${className}`}
     >
       {children}
     </motion.div>

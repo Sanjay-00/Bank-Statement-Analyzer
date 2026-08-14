@@ -19,7 +19,7 @@ export function CategoryTable({ rows }: { rows: CategoryRow[] }) {
   );
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-border shadow-[0_1px_3px_rgb(var(--ink)/0.05)]">
+    <div className="overflow-x-auto rounded-lg border border-border shadow-card">
       <table className="w-full text-sm">
         <thead className="bg-surface">
           <tr>

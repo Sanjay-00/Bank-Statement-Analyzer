@@ -38,6 +38,13 @@ export default {
       animation: {
         shimmer: "shimmer 1.6s ease-in-out infinite",
       },
+      // Shared card elevation - rest state and hover state, tokenized so
+      // every card/panel lifts by the same amount instead of each component
+      // hand-typing its own rgb(var(--ink)/…) shadow value.
+      boxShadow: {
+        card: "0 1px 3px rgb(var(--ink) / 0.05)",
+        "card-hover": "0 8px 22px rgb(var(--ink) / 0.08)",
+      },
     },
   },
   plugins: [require("tailwindcss-animate")],

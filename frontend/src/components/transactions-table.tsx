@@ -121,7 +121,7 @@ export function TransactionsTable({ transactions }: { transactions: Transaction[
       </div>
 
       <div
-        className="border border-border rounded-lg overflow-hidden shadow-[0_1px_3px_rgb(var(--ink)/0.05)]"
+        className="border border-border rounded-lg overflow-hidden shadow-card"
         role="table"
       >
         {/* Header */}
