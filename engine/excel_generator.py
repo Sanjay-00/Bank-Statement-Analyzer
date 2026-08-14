@@ -704,10 +704,136 @@ def _build_transactions_sheet(wb, result) -> None:
     ws.page_setup.fitToWidth = 1
 
 
-def get_filename(bank_name: str, account_holder: str = None) -> str:
+def generate_quick_excel(result) -> bytes:
+    """`result` is an engine.statement.QuickAnalysisResult. One sheet, not
+    seven: ABB, due-date recommendation, and monthly credit/debit only -
+    the same condensed scope as the quick-analysis UI tab, so the download
+    and the on-screen view never promise different things."""
+    wb = Workbook()
+    _build_quick_sheet(wb, result)
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+def _build_quick_sheet(wb, result) -> None:
+    ws = wb.active
+    ws.title = "Quick Summary"
+    ws.sheet_properties.tabColor = BRAND
+    for col, width in zip("ABCD", (30, 24, 24, 24)):
+        ws.column_dimensions[col].width = width
+
+    generated = datetime.datetime.now().strftime("%d %b %Y, %H:%M")
+    title = f"{result.account_holder}  ·  {result.bank_name}" if result.account_holder else result.bank_name
+    next_row = _banner(
+        ws, "A:D", f"{title}  ·  Quick Analysis",
+        subtitle=f"Generated {generated}  ·  Average balance, best EMI due date, monthly cash flow",
+    )
+    r = next_row
+
+    s = result.summary
+    info_rows = [
+        ("Pages Processed", result.page_count),
+        ("Transactions Parsed", s.get("transaction_count")),
+        ("Opening Balance (Rs.)", s.get("opening_balance")),
+        ("Closing Balance (Rs.)", s.get("closing_balance")),
+    ]
+    for label, value in info_rows:
+        lbl = ws.cell(row=r, column=1, value=label)
+        lbl.font = _f(bold=True, color=BRAND)
+        val = ws.cell(row=r, column=2, value=value if value is not None else "NA")
+        if isinstance(value, (int, float)):
+            val.number_format = "#,##0.00"
+        r += 1
+    r += 1
+
+    sub = ws.cell(row=r, column=1, value="Average Bank Balance (ABB)")
+    sub.font = _f(size=12, bold=True, color=BRAND)
+    r += 1
+    abb = result.abb
+    for w in (1, 3, 6, 12):
+        win = abb["windows"].get(w, {})
+        avg = win.get("average")
+        label = f"ABB{w} (last {w} month{'s' if w > 1 else ''})"
+        detail = f"Rs.{avg:,.2f}" if avg is not None else f"NA ({win.get('covered_days', 0)}/{win.get('total_days', 0)} days covered)"
+        r = _kv_pair(ws, r, 1, label, detail)
+    r += 1
+
+    sub = ws.cell(row=r, column=1, value="Recommended EMI due date")
+    sub.font = _f(size=12, bold=True, color=BRAND)
+    r += 1
+    dda = result.due_date_analysis
+    headers = ["Priority", "Recommended Due Date", f"Avg Balance (Rs.), last {dda['months_used']} mo"]
+    for col_idx, h in enumerate(headers, 1):
+        c = ws.cell(row=r, column=col_idx, value=h)
+        c.font = _f(bold=True, color=WHITE)
+        c.fill = _fill(BRAND)
+        c.border = _b()
+        c.alignment = _a("left" if col_idx == 2 else "center", wrap=True)
+    r += 1
+
+    if not dda["recommendations"]:
+        c = ws.cell(row=r, column=1, value="Not enough reconciled data to recommend a due date.")
+        c.font = _f(italic=True)
+        r += 1
+    for rec in dda["recommendations"]:
+        bg = _PRIORITY_BG.get(rec["priority"])
+        fg = _PRIORITY_FONT.get(rec["priority"], "000000")
+        values = [rec["priority"], f"{rec['due_date']} of the month", rec["avg_balance"]]
+        for col_idx, v in enumerate(values, 1):
+            c = ws.cell(row=r, column=col_idx, value=v)
+            c.border = _b()
+            if bg:
+                c.fill = _fill(bg)
+                c.font = _f(bold=True, color=fg)
+            if col_idx == 3:
+                c.number_format = "#,##0.00"
+                c.alignment = _a("right")
+            elif col_idx == 2:
+                c.alignment = _a("left")
+            else:
+                c.alignment = _a("center")
+        r += 1
+    r += 1
+
+    sub = ws.cell(row=r, column=1, value="Monthly credit / debit")
+    sub.font = _f(size=12, bold=True, color=BRAND)
+    r += 1
+    headers = ["Month", "Total Debit (Rs.)", "Total Credit (Rs.)", "Net (Rs.)"]
+    for col_idx, h in enumerate(headers, 1):
+        c = ws.cell(row=r, column=col_idx, value=h)
+        c.font = _f(bold=True, color=WHITE)
+        c.fill = _fill(BRAND)
+        c.border = _b()
+        c.alignment = _a("center", wrap=True)
+    r += 1
+
+    for (year, month), b in result.monthly.items():
+        row_bg = _fill(LIGHT_GREY) if r % 2 == 0 else _fill(WHITE)
+        values = [f"{_MONTH_NAME[month]} {year}", b["debit"], b["credit"], b["net"]]
+        for col_idx, v in enumerate(values, 1):
+            c = ws.cell(row=r, column=col_idx, value=v)
+            c.border = _b()
+            c.fill = row_bg
+            if col_idx == 1:
+                c.font = _f(bold=True)
+                c.alignment = _a("left")
+            else:
+                c.number_format = "#,##0.00"
+                c.alignment = _a("right")
+                if col_idx == 4 and isinstance(v, (int, float)) and v < 0:
+                    c.font = _f(color=FAILED_FONT)
+        r += 1
+
+    ws.freeze_panes = f"A{next_row}"
+
+
+def get_filename(bank_name: str, account_holder: str = None, label: str = "Statement_Analysis") -> str:
     """Named after the customer when the header block yielded a confident
     name; falls back to the bank name otherwise - never a guessed name."""
-    label = account_holder or bank_name
-    safe_name = re.sub(r"[^\w\s-]", "", label).strip().replace(" ", "_")
+    label_part = account_holder or bank_name
+    safe_name = re.sub(r"[^\w\s-]", "", label_part).strip().replace(" ", "_")
     date_str = datetime.datetime.now().strftime("%d%b%Y")
-    return f"{safe_name}_Statement_Analysis_{date_str}.xlsx"
+    return f"{safe_name}_{label}_{date_str}.xlsx"

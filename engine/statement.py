@@ -43,6 +43,25 @@ class AnalysisResult:
     score: dict                    # FOIR/DSCR + composite score, see signals/scoring.py
 
 
+@dataclass
+class QuickAnalysisResult:
+    """Lightweight sibling of AnalysisResult for the "quick analysis" path:
+    reconciled balances only, none of the deep-analysis signal stack
+    (categorization, salary, bounces, red flags, scoring, fraud/tamper
+    checks). Exists as its own shape rather than AnalysisResult with fields
+    defaulted/omitted, so nothing downstream (schemas, Excel) has to guess
+    which of AnalysisResult's fields are meaningful in this mode."""
+    bank_key: str
+    bank_name: str
+    account_holder: str
+    page_count: int
+    scanned_pages: int
+    summary: dict
+    due_date_analysis: dict
+    monthly: "object"          # OrderedDict[(year, month) -> dict]
+    abb: dict                  # {"as_of", "windows": {1,3,6,12: {...}}}
+
+
 _SEVERITY_ORDER = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
 
 
@@ -89,7 +108,7 @@ def analyze(file_bytes: bytes, password: str = None,
     red_flags = analyze_red_flags(verified, bounces, salary, abb, cashflow)
     score = analyze_cashflow_score(verified, monthly, salary, bounces, abb, cashflow, red_flags)
 
-    fraud_signals = pdf_forensics(file_bytes) + content_fraud_signals(verified)
+    fraud_signals = pdf_forensics(file_bytes, password=password) + content_fraud_signals(verified)
     fraud_signals.sort(key=lambda s: _SEVERITY_ORDER.get(s.get("severity"), 9))
 
     return AnalysisResult(
@@ -110,4 +129,33 @@ def analyze(file_bytes: bytes, password: str = None,
         bounces=bounces,
         red_flags=red_flags,
         score=score,
+    )
+
+
+def analyze_quick(file_bytes: bytes, password: str = None,
+                   pan: str = None, dob: str = None, name: str = None) -> QuickAnalysisResult:
+    """Same PDF-to-reconciled-ledger path as analyze(), but stops there:
+    no categorization, salary/bounce/red-flag signals, scoring, or fraud
+    forensics - just what "quick analysis" actually needs (ABB, due-date
+    recommendation, monthly credit/debit), computed without paying for the
+    rest of the deep-analysis stack."""
+    stmt = load_statement(file_bytes, password=password, pan=pan, dob=dob, name=name)
+
+    bank_key, bank_name = detect(stmt)
+    account_holder = extract_account_holder(stmt)
+
+    digital_pages = [p for p in stmt.pages if not p.is_scanned]
+    raw = _chronological(extract_transactions(digital_pages))
+    verified = verify(raw)
+
+    return QuickAnalysisResult(
+        bank_key=bank_key,
+        bank_name=bank_name,
+        account_holder=account_holder,
+        page_count=stmt.page_count,
+        scanned_pages=stmt.page_count - len(digital_pages),
+        summary=summary(verified),
+        due_date_analysis=analyze_due_dates(verified),
+        monthly=monthly_summary(verified),
+        abb=analyze_abb(verified),
     )
