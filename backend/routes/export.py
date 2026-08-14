@@ -12,7 +12,7 @@ from typing import Optional
 from fastapi import APIRouter, File, Form, UploadFile
 from fastapi.responses import Response
 
-from engine.excel_generator import generate_excel, get_filename
+from engine.excel_generator import generate_excel, generate_quick_excel, get_filename
 
 from ..upload import analyze_upload
 
@@ -25,11 +25,16 @@ _XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.
 async def export_excel(
     file: UploadFile = File(...),
     password: Optional[str] = Form(default=None),
+    mode: str = Form(default="deep"),
 ) -> Response:
-    result = await analyze_upload(file, password)
+    result = await analyze_upload(file, password, mode)
 
-    excel_bytes = generate_excel(result)
-    filename = get_filename(result.bank_name, result.account_holder)
+    if mode == "quick":
+        excel_bytes = generate_quick_excel(result)
+        filename = get_filename(result.bank_name, result.account_holder, label="Quick_Analysis")
+    else:
+        excel_bytes = generate_excel(result)
+        filename = get_filename(result.bank_name, result.account_holder)
 
     return Response(
         content=excel_bytes,

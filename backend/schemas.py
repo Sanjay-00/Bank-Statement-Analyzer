@@ -179,6 +179,21 @@ class AnalysisResponse(BaseModel):
     score: ScoreOut
 
 
+class QuickAnalysisResponse(BaseModel):
+    """Mirrors engine.statement.QuickAnalysisResult - the condensed sibling
+    of AnalysisResponse for the quick-analysis path (ABB, due-date
+    recommendation, monthly credit/debit only, no signal stack)."""
+    bank_key: Optional[str]
+    bank_name: str
+    account_holder: Optional[str]
+    page_count: int
+    scanned_pages: int
+    summary: SummaryOut
+    due_date_analysis: DueDateAnalysisOut
+    monthly: list[MonthlyEntryOut]
+    abb: AbbOut
+
+
 class ErrorResponse(BaseModel):
     error_code: str
     message: str

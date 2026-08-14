@@ -1,7 +1,8 @@
+import type { z } from "zod";
 import { DueDateCard } from "../../components/due-date-card";
 import { EmptyState } from "../../components/empty-state";
 import { fmtInr } from "../../lib/format";
-import type { AnalysisResponse } from "../../lib/schema";
+import type { DueDateAnalysisSchema } from "../../lib/schema";
 
 const ANCHORS = [4, 9, 14, 19] as const;
 const ANCHOR_LABEL: Record<number, string> = {
@@ -17,7 +18,7 @@ const DAY_KEY: Record<number, "day_4" | "day_9" | "day_14" | "day_19"> = {
   19: "day_19",
 };
 
-export function DueDateTab({ dda }: { dda: AnalysisResponse["due_date_analysis"] }) {
+export function DueDateTab({ dda }: { dda: z.infer<typeof DueDateAnalysisSchema> }) {
   if (dda.recommendations.length === 0) {
     return <EmptyState message="Not enough reconciled data to recommend a due date." />;
   }

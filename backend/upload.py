@@ -9,10 +9,12 @@ as a valid upload or how a given failure is reported.
 from fastapi import HTTPException, UploadFile
 
 from engine.parser import LockedPDFError
-from engine.statement import AnalysisResult, analyze
+from engine.statement import AnalysisResult, QuickAnalysisResult, analyze, analyze_quick
 
 
-async def analyze_upload(file: UploadFile, password: str | None) -> AnalysisResult:
+async def analyze_upload(
+    file: UploadFile, password: str | None, mode: str = "deep",
+) -> AnalysisResult | QuickAnalysisResult:
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(
             status_code=400,
@@ -27,6 +29,8 @@ async def analyze_upload(file: UploadFile, password: str | None) -> AnalysisResu
         )
 
     try:
+        if mode == "quick":
+            return analyze_quick(file_bytes, password=password)
         return analyze(file_bytes, password=password)
     except LockedPDFError:
         raise HTTPException(

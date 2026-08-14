@@ -147,6 +147,24 @@ export const ScoreSchema = z.object({
   foir_dscr: FoirDscrSchema,
 });
 
+/**
+ * Mirrors backend/schemas.py's QuickAnalysisResponse - the condensed shape
+ * for the quick-analysis mode (ABB, due-date recommendation, monthly
+ * credit/debit only, none of the deep-analysis signal stack).
+ */
+export const QuickAnalysisResponseSchema = z.object({
+  bank_key: z.string().nullable(),
+  bank_name: z.string(),
+  account_holder: z.string().nullable(),
+  page_count: z.number(),
+  scanned_pages: z.number(),
+  summary: SummarySchema,
+  due_date_analysis: DueDateAnalysisSchema,
+  monthly: z.array(MonthlyEntrySchema),
+  abb: AbbSchema,
+});
+export type QuickAnalysisResponse = z.infer<typeof QuickAnalysisResponseSchema>;
+
 export const AnalysisResponseSchema = z.object({
   bank_key: z.string().nullable(),
   bank_name: z.string(),
