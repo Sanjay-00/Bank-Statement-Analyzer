@@ -38,6 +38,11 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Content-Disposition isn't in the browser's CORS-safelisted response
+    # headers by default, so without this the frontend's fetch() can't read
+    # the real filename off the Excel export response and silently falls
+    # back to a generic name - this is what actually exposes it to JS.
+    expose_headers=["Content-Disposition"],
 )
 
 app.include_router(analyze.router, prefix="/api")

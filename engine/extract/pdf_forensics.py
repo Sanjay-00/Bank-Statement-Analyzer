@@ -153,14 +153,17 @@ def _font_signals_for_page(page) -> list:
     }]
 
 
-def analyze(file_bytes: bytes, max_font_check_pages: int = 60) -> list:
+def analyze(file_bytes: bytes, max_font_check_pages: int = 60, password: str = None) -> list:
     """
     Self-contained: opens its own fitz.Document from file_bytes rather than
     reusing engine.parser's, so this stays decoupled from the extraction
-    pipeline. Font-consistency scanning is capped at `max_font_check_pages`
-    (checked evenly across the document) - it's the one check here with
-    real per-page cost, and a tampered page is just as likely to be caught
-    by a sample as by scanning all 300 pages of a large statement.
+    pipeline. That independence means a password-protected statement needs
+    re-authenticating here too - engine.parser unlocking its own copy of the
+    document doesn't carry over to this one. Font-consistency scanning is
+    capped at `max_font_check_pages` (checked evenly across the document) -
+    it's the one check here with real per-page cost, and a tampered page is
+    just as likely to be caught by a sample as by scanning all 300 pages of
+    a large statement.
     """
     try:
         doc = fitz.open(stream=file_bytes, filetype="pdf")
@@ -171,9 +174,19 @@ def analyze(file_bytes: bytes, max_font_check_pages: int = 60) -> list:
             "detail": "The PDF could not be opened for forensic analysis.",
         }]
 
+    # Page-level checks (font sampling) need an authenticated document;
+    # metadata/structural checks below don't touch page content, so they
+    # still run even if authentication fails or no password was supplied.
+    page_access_ok = not doc.needs_pass
+    if doc.needs_pass and password:
+        page_access_ok = bool(doc.authenticate(password))
+
     signals = []
     signals.extend(_metadata_signals(doc))
     signals.extend(_structural_signals(file_bytes))
+
+    if not page_access_ok:
+        return signals
 
     page_count = doc.page_count
     if page_count <= max_font_check_pages:
