@@ -1,13 +1,12 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { QueryClient, QueryClientProvider, useMutation } from "@tanstack/react-query";
-import { ApiError, analyzeStatement, downloadExcel } from "./lib/api";
-import type { AnalysisResponse } from "./lib/schema";
+import { ApiError, analyzeStatement, downloadExcel, type AnalysisMode } from "./lib/api";
+import type { AnalysisResponse, QuickAnalysisResponse } from "./lib/schema";
 import { UploadPage } from "./pages/upload";
 import { ResultsPage } from "./pages/results";
-import { DashboardSkeleton } from "./components/skeleton";
+import { QuickResultsPage } from "./pages/quick-results";
 import { TooltipProvider } from "./components/ui/tooltip";
-import { TopNav } from "./components/top-nav";
 
 const queryClient = new QueryClient();
 
@@ -29,22 +28,27 @@ function useDarkMode() {
 function AppShell() {
   const { dark, toggle } = useDarkMode();
   const [file, setFile] = useState<File | null>(null);
-  const [result, setResult] = useState<AnalysisResponse | null>(null);
+  const [mode, setMode] = useState<AnalysisMode>("deep");
+  const [result, setResult] = useState<AnalysisResponse | QuickAnalysisResponse | null>(null);
 
   const analyzeMutation = useMutation({
-    mutationFn: ({ file, password }: { file: File; password: string }) => analyzeStatement(file, password),
+    mutationFn: ({ file, mode, password }: { file: File; mode: AnalysisMode; password?: string }) =>
+      mode === "quick" ? analyzeStatement(file, password, "quick") : analyzeStatement(file, password, "deep"),
     onSuccess: (data, vars) => {
       setResult(data);
       setFile(vars.file);
+      setMode(vars.mode);
     },
   });
 
   const downloadMutation = useMutation({
     mutationFn: () => {
       if (!file) throw new Error("No file to export.");
-      return downloadExcel(file);
+      return downloadExcel(file, undefined, mode);
     },
   });
+
+  const passwordRequired = analyzeMutation.error instanceof ApiError && analyzeMutation.error.errorCode === "LOCKED_PDF";
 
   const errorMessage =
     analyzeMutation.error instanceof ApiError
@@ -53,7 +57,11 @@ function AppShell() {
         ? analyzeMutation.error.message
         : null;
 
-  const view = result && !analyzeMutation.isPending ? "results" : analyzeMutation.isPending ? "loading" : "upload";
+  // No separate "loading" page - the upload page shows its own inline
+  // progress indicator while the mutation is pending (UploadPage's `loading`
+  // prop), so the transition into results is a single swap the moment data
+  // arrives instead of upload -> skeleton page -> results.
+  const view = result && !analyzeMutation.isPending ? "results" : "upload";
 
   return (
     <div className="min-h-screen bg-paper text-ink font-sans">
@@ -61,21 +69,13 @@ function AppShell() {
         {view === "upload" && (
           <motion.div key="upload" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
             <UploadPage
-              onAnalyze={(f, password) => analyzeMutation.mutate({ file: f, password })}
+              onAnalyze={(f, mode, password) => analyzeMutation.mutate({ file: f, mode, password })}
               loading={analyzeMutation.isPending}
               error={errorMessage}
+              passwordRequired={passwordRequired}
               dark={dark}
               onToggleTheme={toggle}
             />
-          </motion.div>
-        )}
-
-        {view === "loading" && (
-          <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-            <TopNav dark={dark} onToggleTheme={toggle} />
-            <div className="max-w-[1440px] mx-auto px-6 py-6">
-              <DashboardSkeleton />
-            </div>
           </motion.div>
         )}
 
@@ -87,18 +87,33 @@ function AppShell() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.25, ease: "easeOut" }}
           >
-            <ResultsPage
-              result={result}
-              onDownload={() => downloadMutation.mutate()}
-              downloading={downloadMutation.isPending}
-              onReset={() => {
-                setResult(null);
-                setFile(null);
-                analyzeMutation.reset();
-              }}
-              dark={dark}
-              onToggleTheme={toggle}
-            />
+            {mode === "quick" ? (
+              <QuickResultsPage
+                result={result as QuickAnalysisResponse}
+                onDownload={() => downloadMutation.mutate()}
+                downloading={downloadMutation.isPending}
+                onReset={() => {
+                  setResult(null);
+                  setFile(null);
+                  analyzeMutation.reset();
+                }}
+                dark={dark}
+                onToggleTheme={toggle}
+              />
+            ) : (
+              <ResultsPage
+                result={result as AnalysisResponse}
+                onDownload={() => downloadMutation.mutate()}
+                downloading={downloadMutation.isPending}
+                onReset={() => {
+                  setResult(null);
+                  setFile(null);
+                  analyzeMutation.reset();
+                }}
+                dark={dark}
+                onToggleTheme={toggle}
+              />
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -108,7 +123,7 @@ function AppShell() {
 
 function lockedPdfMessage(err: ApiError): string {
   if (err.errorCode === "LOCKED_PDF") {
-    return "This statement is password-protected and the password (if any) didn't unlock it. Enter the PDF's password and try again.";
+    return "This statement is password-protected. Enter the PDF's password below and try again.";
   }
   return err.message;
 }

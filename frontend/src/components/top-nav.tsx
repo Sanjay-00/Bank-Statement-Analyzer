@@ -22,7 +22,7 @@ export function TopNav({ dark, onToggleTheme, onLogoClick }: TopNavProps) {
 
   return (
     <header className="sticky top-0 z-20 border-b border-border bg-paper/85 backdrop-blur-sm">
-      <div className="max-w-[1440px] mx-auto px-6 h-16 flex items-center justify-between">
+      <div className="max-w-[1440px] mx-auto px-8 h-16 flex items-center justify-between">
         {onLogoClick ? (
           <button
             onClick={onLogoClick}

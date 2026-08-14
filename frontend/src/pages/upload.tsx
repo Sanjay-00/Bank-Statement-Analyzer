@@ -1,9 +1,10 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { CheckCircle2, FileText, Loader2, Sparkles, UploadCloud, X } from "lucide-react";
+import { CheckCircle2, FileText, Loader2, Lock, Sparkles, UploadCloud, X } from "lucide-react";
 import { FeatureStrip } from "../components/feature-strip";
 import { HeroPreview } from "../components/hero-preview";
 import { TopNav } from "../components/top-nav";
+import type { AnalysisMode } from "../lib/api";
 
 const stagger = {
   hidden: {},
@@ -15,14 +16,23 @@ const fadeUp = {
 };
 
 interface UploadPageProps {
-  onAnalyze: (file: File, password: string) => void;
+  onAnalyze: (file: File, mode: AnalysisMode, password?: string) => void;
   loading: boolean;
   error: string | null;
+  /** Set once the backend has told us this specific PDF is locked - the
+   * password field only appears at that point, not up front for every
+   * upload (most statements aren't password-protected). */
+  passwordRequired: boolean;
   dark: boolean;
   onToggleTheme: () => void;
 }
 
 const CAPABILITIES = ["Reconciliation", "Fraud detection", "Credit scoring"];
+
+const MODES: { value: AnalysisMode; label: string; description: string }[] = [
+  { value: "deep", label: "Deep analysis", description: "Full ledger, fraud signals, red flags & credit score" },
+  { value: "quick", label: "Quick analysis", description: "Average balance, best due date & monthly cash flow" },
+];
 
 /**
  * Two-column hero: big, confident, bold-weight headline + checklist + the
@@ -34,16 +44,22 @@ const CAPABILITIES = ["Reconciliation", "Fraud detection", "Credit scoring"];
  * tints, much larger/heavier type, and showing the actual product instead
  * of an abstract diagram.
  */
-export function UploadPage({ onAnalyze, loading, error, dark, onToggleTheme }: UploadPageProps) {
+export function UploadPage({ onAnalyze, loading, error, passwordRequired, dark, onToggleTheme }: UploadPageProps) {
   const [file, setFile] = useState<File | null>(null);
-  const [password, setPassword] = useState("");
   const [dragging, setDragging] = useState(false);
+  const [mode, setMode] = useState<AnalysisMode>("deep");
+  const [password, setPassword] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
 
   const handleFiles = useCallback((files: FileList | null) => {
     const f = files?.[0];
     if (f && f.type === "application/pdf") setFile(f);
   }, []);
+
+  useEffect(() => {
+    if (passwordRequired) passwordRef.current?.focus();
+  }, [passwordRequired]);
 
   return (
     <div className="min-h-screen bg-paper text-ink">
@@ -73,7 +89,7 @@ export function UploadPage({ onAnalyze, loading, error, dark, onToggleTheme }: U
           variants={stagger}
           initial="hidden"
           animate="show"
-          className="max-w-[1440px] mx-auto px-6 grid lg:grid-cols-2 gap-16 items-center pt-20 pb-28"
+          className="max-w-[1440px] mx-auto px-8 grid lg:grid-cols-2 gap-16 items-center pt-10 pb-28"
         >
           {/* Left: headline + checklist + functional dropzone */}
           <div>
@@ -116,17 +132,18 @@ export function UploadPage({ onAnalyze, loading, error, dark, onToggleTheme }: U
               variants={fadeUp}
               onDragOver={(e) => {
                 e.preventDefault();
-                setDragging(true);
+                if (!loading) setDragging(true);
               }}
               onDragLeave={() => setDragging(false)}
               onDrop={(e) => {
                 e.preventDefault();
                 setDragging(false);
-                handleFiles(e.dataTransfer.files);
+                if (!loading) handleFiles(e.dataTransfer.files);
               }}
-              onClick={() => inputRef.current?.click()}
+              onClick={() => !loading && inputRef.current?.click()}
               className={[
-                "rounded-xl border-2 border-dashed p-8 flex flex-col items-center gap-3 cursor-pointer transition-colors bg-paper",
+                "rounded-xl border-2 border-dashed p-8 flex flex-col items-center gap-3 transition-colors bg-paper",
+                loading ? "cursor-not-allowed opacity-60" : "cursor-pointer",
                 dragging ? "border-accent bg-accent/5" : "border-border hover:border-accent/50",
               ].join(" ")}
             >
@@ -135,6 +152,7 @@ export function UploadPage({ onAnalyze, loading, error, dark, onToggleTheme }: U
                 type="file"
                 accept="application/pdf"
                 className="hidden"
+                disabled={loading}
                 onChange={(e) => handleFiles(e.target.files)}
               />
               {file ? (
@@ -149,7 +167,8 @@ export function UploadPage({ onAnalyze, loading, error, dark, onToggleTheme }: U
                       e.stopPropagation();
                       setFile(null);
                     }}
-                    className="ml-auto p-1.5 rounded-md hover:bg-surface text-muted"
+                    disabled={loading}
+                    className="ml-auto p-1.5 rounded-md hover:bg-surface text-muted disabled:opacity-40 disabled:cursor-not-allowed"
                     aria-label="Remove file"
                   >
                     <X className="h-4 w-4" />
@@ -166,18 +185,61 @@ export function UploadPage({ onAnalyze, loading, error, dark, onToggleTheme }: U
               )}
             </motion.div>
 
-            <motion.div variants={fadeUp} className="flex items-center gap-3 mt-4">
-              <input
-                type="password"
-                placeholder="PDF password, only if locked"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-paper focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-              />
+            <motion.div variants={fadeUp} className="mt-6">
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted mb-2">Analysis type</div>
+              <div role="radiogroup" aria-label="Analysis type" className="inline-flex rounded-full border border-border bg-paper p-1 gap-1">
+                {MODES.map((m) => (
+                  <button
+                    key={m.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={mode === m.value}
+                    title={m.description}
+                    disabled={loading}
+                    onClick={() => setMode(m.value)}
+                    className={[
+                      "px-4 py-1.5 rounded-full text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50 disabled:cursor-not-allowed",
+                      mode === m.value ? "bg-accent text-ink" : "text-muted hover:text-ink",
+                    ].join(" ")}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-muted mt-2">{MODES.find((m) => m.value === mode)?.description}</p>
+            </motion.div>
+
+            {error && (
+              <div className="mt-4 border border-critical/30 bg-critical/5 text-critical text-sm rounded-md p-3">
+                {error}
+              </div>
+            )}
+
+            {passwordRequired && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="mt-4">
+                <label className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted mb-2">
+                  <Lock className="h-3 w-3" />
+                  PDF password
+                </label>
+                <input
+                  ref={passwordRef}
+                  type="password"
+                  placeholder="Enter the PDF's password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && file) onAnalyze(file, mode, password);
+                  }}
+                  className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-paper focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                />
+              </motion.div>
+            )}
+
+            <motion.div variants={fadeUp} className="mt-4">
               <button
-                onClick={() => file && onAnalyze(file, password)}
+                onClick={() => file && onAnalyze(file, mode, password)}
                 disabled={!file || loading}
-                className="inline-flex items-center justify-center gap-2 bg-accent text-ink font-bold text-sm rounded-full px-7 py-2.5 whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed hover:brightness-95 transition-[filter] shadow-[0_4px_14px_rgb(var(--accent)/0.35)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+                className="w-full inline-flex items-center justify-center gap-2 bg-accent text-ink font-bold text-sm rounded-full px-7 py-2.5 whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed hover:brightness-95 transition-[filter] shadow-[0_4px_14px_rgb(var(--accent)/0.35)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
               >
                 {loading ? (
                   <>
@@ -188,13 +250,22 @@ export function UploadPage({ onAnalyze, loading, error, dark, onToggleTheme }: U
                   "Analyze →"
                 )}
               </button>
-            </motion.div>
 
-            {error && (
-              <div className="mt-4 border border-critical/30 bg-critical/5 text-critical text-sm rounded-md p-3">
-                {error}
-              </div>
-            )}
+              {loading && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-3">
+                  <div className="h-1 rounded-full bg-border overflow-hidden">
+                    <motion.div
+                      className="h-full w-1/3 rounded-full bg-accent"
+                      animate={{ x: ["-100%", "220%"] }}
+                      transition={{ duration: 1.1, repeat: Infinity, ease: "easeInOut" }}
+                    />
+                  </div>
+                  <p className="text-xs text-muted mt-2">
+                    Extracting and reconciling {file?.name ?? "the statement"} - large statements can take a few seconds.
+                  </p>
+                </motion.div>
+              )}
+            </motion.div>
 
             <motion.p variants={fadeUp} className="text-xs text-muted mt-6">
               Processed on the server for this request only. Nothing is stored.
@@ -214,7 +285,7 @@ export function UploadPage({ onAnalyze, loading, error, dark, onToggleTheme }: U
       </div>
 
       <div className="border-t border-border bg-surface/40">
-        <div className="max-w-[1440px] mx-auto px-6 py-16">
+        <div className="max-w-[1440px] mx-auto px-8 py-16">
           <h2 className="text-lg font-semibold mb-10 text-center">How it works</h2>
           <FeatureStrip />
         </div>
