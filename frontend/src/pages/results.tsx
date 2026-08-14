@@ -1,10 +1,12 @@
+import { CalendarClock, Layers, ShieldAlert, ShieldX, Table2 } from "lucide-react";
 import { CategoryTable } from "../components/category-table";
 import { EmptyState } from "../components/empty-state";
+import { Panel } from "../components/panel";
 import { ResultsHeader } from "../components/results-header";
 import { ResultsKpiRow } from "../components/results-kpi-row";
+import { SectionHeading } from "../components/section-heading";
 import { SignalCard } from "../components/signal-card";
 import { TopNav } from "../components/top-nav";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { TransactionsTable } from "../components/transactions-table";
 import { CashflowTab } from "./tabs/cashflow-tab";
 import { DueDateTab } from "./tabs/due-date-tab";
@@ -20,6 +22,13 @@ interface ResultsPageProps {
   onToggleTheme: () => void;
 }
 
+/**
+ * One continuous scroll, same idiom as quick-results.tsx, instead of a tab
+ * shell - every section is a Panel stacked top to bottom, so deep and quick
+ * analysis read as the same product at two depths rather than two different
+ * UIs. Transactions stays last since it's the heaviest section (virtualized
+ * table, thousands of rows) and the least likely thing to be read first.
+ */
 export function ResultsPage({ result, onDownload, downloading, onReset, dark, onToggleTheme }: ResultsPageProps) {
   const { summary, due_date_analysis, red_flags, fraud_signals, salary, bounces, cashflow } = result;
 
@@ -34,7 +43,7 @@ export function ResultsPage({ result, onDownload, downloading, onReset, dark, on
   return (
     <div>
       <TopNav dark={dark} onToggleTheme={onToggleTheme} onLogoClick={onReset} />
-      <div className="max-w-[1440px] mx-auto px-6 py-6">
+      <div className="max-w-[1100px] mx-auto px-6 py-6">
         <ResultsHeader
           result={result}
           highFraud={highFraud}
@@ -56,26 +65,17 @@ export function ResultsPage({ result, onDownload, downloading, onReset, dark, on
 
         {failedN > 0 && (
           <p className="text-xs text-muted -mt-6 mb-8">
-            {failedN} row(s) failed reconciliation - flagged in the Transactions tab rather than silently included.
+            {failedN} row(s) failed reconciliation - flagged in the Transactions section rather than silently included.
           </p>
         )}
 
-        <Tabs defaultValue="overview">
-          <TabsList>
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="redflags">Red flags ({red_flags.length})</TabsTrigger>
-            <TabsTrigger value="fraud">Fraud signals ({fraud_signals.length})</TabsTrigger>
-            <TabsTrigger value="duedate">Due date</TabsTrigger>
-            <TabsTrigger value="cashflow">Cash flow</TabsTrigger>
-            <TabsTrigger value="categories">Categories</TabsTrigger>
-            <TabsTrigger value="transactions">Transactions ({summary.transaction_count})</TabsTrigger>
-          </TabsList>
+        <div className="space-y-6">
+          <OverviewTab result={result} />
 
-          <TabsContent value="overview">
-            <OverviewTab result={result} />
-          </TabsContent>
-
-          <TabsContent value="redflags">
+          <Panel>
+            <SectionHeading icon={ShieldAlert} help="Deterministic checks on the reconciled ledger and the signals it feeds - see each card for the exact rule that triggered it.">
+              Red flags ({red_flags.length})
+            </SectionHeading>
             {red_flags.length === 0 ? (
               <EmptyState message="No red flags raised." />
             ) : (
@@ -85,9 +85,12 @@ export function ResultsPage({ result, onDownload, downloading, onReset, dark, on
                 ))}
               </div>
             )}
-          </TabsContent>
+          </Panel>
 
-          <TabsContent value="fraud">
+          <Panel>
+            <SectionHeading icon={ShieldX} help="PDF metadata forensics, incremental-save history, font consistency, and content-level checks - deterministic, not an ML verdict.">
+              Fraud signals ({fraud_signals.length})
+            </SectionHeading>
             {fraud_signals.length === 0 ? (
               <EmptyState message="No fraud/tamper signals detected." />
             ) : (
@@ -97,26 +100,27 @@ export function ResultsPage({ result, onDownload, downloading, onReset, dark, on
                 ))}
               </div>
             )}
-          </TabsContent>
+          </Panel>
 
-          <TabsContent value="duedate">
+          <Panel>
+            <SectionHeading icon={CalendarClock}>Due date</SectionHeading>
             <DueDateTab dda={due_date_analysis} />
-          </TabsContent>
+          </Panel>
 
-          <TabsContent value="cashflow">
-            <CashflowTab result={result} salary={salary} bounces={bounces} cashflow={cashflow} />
-          </TabsContent>
+          <CashflowTab result={result} salary={salary} bounces={bounces} cashflow={cashflow} />
 
-          <TabsContent value="categories">
+          <Panel>
+            <SectionHeading icon={Layers}>Categories</SectionHeading>
             <CategoryTable
               rows={Object.entries(result.category_summary).map(([category, b]) => ({ category, ...b }))}
             />
-          </TabsContent>
+          </Panel>
 
-          <TabsContent value="transactions">
+          <Panel>
+            <SectionHeading icon={Table2}>Transactions ({summary.transaction_count})</SectionHeading>
             <TransactionsTable transactions={result.transactions} />
-          </TabsContent>
-        </Tabs>
+          </Panel>
+        </div>
       </div>
     </div>
   );
