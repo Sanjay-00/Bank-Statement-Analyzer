@@ -30,6 +30,8 @@ BANKS = {
     "TJSB":      ("TJSB Sahakari Bank",                 ["TJSB SAHAKARI BANK", "TJSB0"]),
     "BCCB":      ("Bassein Catholic Co-op Bank",         ["BASSEIN CATHOLIC", "BACB0"]),
     "PJSB":      ("Parshwanath Sahakari Bank",            ["PJSB0"]),
+    "SARASWAT":  ("Saraswat Co-operative Bank",            ["SARASWAT", "SRCB0"]),
+    "PANVEL":    ("Panvel Co-op Urban Bank",                ["PANVEL CO-OP", "PANVEL CO OP", "IBKL0"]),
 }
 
 # Amount column mode, detected structurally per statement (not per bank) but
