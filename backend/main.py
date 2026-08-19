@@ -11,9 +11,15 @@ back into HTTP responses. Run with:
 
 import os
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+
+# Loads GEMINI_API_KEY (engine.ingest.vlm's Vision fallback) and any other
+# local config from .env - a no-op if the file doesn't exist, so this is
+# safe on a deploy that sets real env vars directly instead.
+load_dotenv()
 
 from .routes import analyze, export
 

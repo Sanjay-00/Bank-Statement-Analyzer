@@ -2,17 +2,22 @@
 parser.py - PDF I/O: opens a bank statement, unlocks it if needed, and hands
 back per-page word boxes for the extraction stage.
 
-Digital-text only for now (Phase 1-2). A page whose embedded text is too thin
-to be a real digital layer is flagged as scanned rather than silently parsed
-into garbage - OCR dispatch for those pages lands in Phase 3, reusing
-CIBIL_EXCEL's word-box OCR approach.
+A page whose embedded text is too thin to be a real digital layer is a scan
+or photograph, not a digital export - it gets OCR'd on the spot (Tesseract,
+via engine.ingest.ocr) rather than silently parsed into garbage. If OCR
+recovers enough text the page is treated as digital from that point on
+(same word-box shape, same downstream row engine); if Tesseract isn't
+installed or the page still comes up thin, it stays flagged as scanned and
+the rest of the pipeline skips it exactly as it did before OCR existed.
 """
 
 from dataclasses import dataclass
 
 import fitz
 
+from .ingest import vlm
 from .ingest.layout import words_from_page
+from .ingest.ocr import ocr_image, render_page_image
 from .ingest.password import unlock
 
 # A page with fewer embedded characters than this (for a normal, non-blank
@@ -32,6 +37,7 @@ class Page:
     height: float
     words: list          # (x0, y0, x1, y1, text)
     is_scanned: bool
+    vision_rows: list = None   # transaction dicts from vlm fallback, or None
 
 
 @dataclass
@@ -59,12 +65,47 @@ def load_statement(file_bytes: bytes, password: str = None,
                 "credentials unlocked it."
             )
 
+    page_words = [words_from_page(page) for page in doc]
+    scanned_idx = [
+        i for i, words in enumerate(page_words)
+        if sum(len(w[4]) for w in words) < _SCAN_CHAR_THRESHOLD
+    ]
+
+    # OCR every scanned page's image up front, in parallel - each Tesseract
+    # call is ~5s and a multi-page scan (a whole statement photographed page
+    # by page) would otherwise OCR serially, one page at a time. Rendering
+    # stays on this thread (MuPDF documents aren't thread-safe); only the
+    # OCR call itself - a subprocess, GIL released while it runs - goes to
+    # the worker pool, so results are identical to serial OCR, just faster.
+    if scanned_idx:
+        from concurrent.futures import ThreadPoolExecutor
+        import os as _os
+
+        images = [render_page_image(doc[i]) for i in scanned_idx]
+        workers = min(len(images), max(1, _os.cpu_count() or 4))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            ocr_results = list(pool.map(ocr_image, images))
+        for i, words in zip(scanned_idx, ocr_results):
+            if sum(len(w[4]) for w in words) >= _SCAN_CHAR_THRESHOLD:
+                page_words[i] = words
+
     pages = []
     any_scanned = False
     for i, page in enumerate(doc):
-        words = words_from_page(page)
-        char_count = sum(len(w[4]) for w in words)
-        is_scanned = char_count < _SCAN_CHAR_THRESHOLD
+        words = page_words[i]
+        is_scanned = sum(len(w[4]) for w in words) < _SCAN_CHAR_THRESHOLD
+        vision_rows = None
+
+        # Tesseract already had its shot at this page (the OCR pass above)
+        # and still came up thin - a scan too poor for OCR (handwriting,
+        # skew, low resolution). Escalate to Gemini Vision only for that
+        # specific case, only if a key is configured; anything it can't
+        # parse either just leaves the page flagged scanned, same as today.
+        if is_scanned and vlm.is_configured():
+            rows = vlm.extract_page_transactions(render_page_image(page))
+            if rows:
+                vision_rows, is_scanned = rows, False
+
         any_scanned = any_scanned or is_scanned
         pages.append(Page(
             index=i,
@@ -72,6 +113,7 @@ def load_statement(file_bytes: bytes, password: str = None,
             height=page.rect.height,
             words=words,
             is_scanned=is_scanned,
+            vision_rows=vision_rows,
         ))
 
     return LoadedStatement(pages=pages, page_count=len(pages), any_scanned=any_scanned)

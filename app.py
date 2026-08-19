@@ -12,6 +12,9 @@ stack of separated cards rather than one continuous block of text.
 
 import pandas as pd
 import streamlit as st
+from dotenv import load_dotenv
+
+load_dotenv()  # GEMINI_API_KEY (engine.ingest.vlm's Vision fallback), etc.
 
 from engine.parser import LockedPDFError
 from engine.statement import analyze
