@@ -55,7 +55,12 @@ _AMOUNT_RE = re.compile(
     # ("10000.0" instead of "10000.00") - \d{1,2} instead of a flat \d{2}
     # so those aren't silently invisible to extraction (a rejected amount
     # token isn't a parse failure, it just vanishes into narration text).
-    r"^-?(?:\d{1,3}(?:,\d{2,3})*|\d+)\.\d{1,2}(CR|DR)?$", re.IGNORECASE
+    # A zero balance sometimes prints with no leading digit at all (".00"
+    # instead of "0.00", seen on Axis statements) - \d* rather than \d+ so
+    # that isn't silently dropped either (dropping it doesn't just vanish
+    # the token, it desyncs which amount is debit/credit/balance for the
+    # row and cascades a wrong running balance into the next transaction).
+    r"^-?(?:\d{1,3}(?:,\d{2,3})*|\d*)\.\d{1,2}(CR|DR)?$", re.IGNORECASE
 )
 
 _REF_RE = re.compile(r"^\d{6,}$")
@@ -82,8 +87,9 @@ _FOOTER_RE = re.compile(
     r"This is a system-generated statement|"
     r"Registered Office Address|Generated On:|"
     r"Total Transaction Count|Total Debit Amount|Total Credit Amount|"
-    r"Balance as on|Total Balance\s*:|Number of Credits|Number of Debits|"
-    r"Page Total\s*:|"
+    r"Balance as on|Total Balance\s*:|Number of Credits?\s*:|Number of Debits?\s*:|"
+    r"Page Total\s*:|TOTAL\s*:-|\bTotals\s*/\s*Balance\b|"
+    r"TRANSACTION TOTAL\b|"
     r"END OF STATEMENT)", re.IGNORECASE
 )
 
@@ -143,6 +149,32 @@ class RawTransaction:
     ambiguous: bool = False      # single amount column, direction inferred
 
 
+def _from_vision_rows(rows: list) -> list:
+    """A page the vlm fallback recovered already comes back as structured
+    rows (see engine.ingest.vlm), not word boxes - no row/column
+    reconstruction needed, just conversion to RawTransaction. Skips a row
+    outright if its date doesn't parse rather than guessing - same "an
+    honest miss beats a wrong guess" rule the rest of this module follows."""
+    out = []
+    for row in rows:
+        date = _parse_date(str(row.get("date", "")).strip())
+        if date is None:
+            continue
+        debit = row.get("debit")
+        credit = row.get("credit")
+        balance = row.get("balance")
+        out.append(RawTransaction(
+            date=date,
+            narration=str(row.get("narration", "")).strip(),
+            chq_ref=None,
+            debit=float(debit) if debit not in (None, "") else None,
+            credit=float(credit) if credit not in (None, "") else None,
+            balance=float(balance) if balance not in (None, "") else None,
+            is_opening=False,
+        ))
+    return out
+
+
 def extract_transactions(pages) -> list:
     """
     `pages` is a list of engine.parser.Page (digital, non-scanned pages only
@@ -151,6 +183,9 @@ def extract_transactions(pages) -> list:
     out = []
     for page in pages:
         if page.is_scanned:
+            continue
+        if page.vision_rows is not None:
+            out.extend(_from_vision_rows(page.vision_rows))
             continue
         rows = rows_with_cells(page.words, page.width)
         out.extend(_extract_page(rows))
@@ -314,12 +349,39 @@ def _extract_page(rows) -> list:
     return transactions
 
 
+# A transaction row structurally never carries more than 3 amount-shaped
+# tokens - debit, credit, balance (or fewer: a single Amount column plus
+# balance, or just a balance on an OPENING row). This is a hard invariant of
+# the ledger format itself, true for every bank regardless of how a given
+# statement phrases its page footer - so it's a far more durable defense
+# against footer/summary noise (page totals, "Number of Credits/Debits",
+# disclaimer text with stray figures, ...) than matching each phrasing by
+# name in _FOOTER_RE ever can be: _FOOTER_RE only catches wording we've
+# already seen, this catches the shape of the corruption regardless of
+# wording. A 4th+ amount-looking token reaching an accumulator that already
+# has 3 is never a real column - drop it into narration instead of letting
+# it desync which figure is debit/credit/balance for the row.
+_MAX_AMOUNTS_PER_ROW = 3
+
+
 def _consume_tokens(acc: dict, tokens: list) -> None:
     for tok in tokens:
-        if _is_amount(tok):
+        if _is_amount(tok) and len(acc["amounts"]) < _MAX_AMOUNTS_PER_ROW:
             acc["amounts"].append(tok)
         elif _REF_RE.match(tok) and acc["chq_ref"] is None:
             acc["chq_ref"] = tok
+        elif acc["date"] is not None and _parse_date(tok) is not None:
+            # A bare date-shaped token showing up after this transaction's
+            # own date is already known is essentially always a "Value
+            # Date" column duplicating the transaction date, not real
+            # narration text - many statements print both, and a tight
+            # column gap between the reference-number/narration column and
+            # the Value Date column can fuse them into one cell (the same
+            # risk this module's own docstring flags for "Value Dt" +
+            # "Withdrawal Amt." - a structural layout-detection limit, not
+            # a per-bank quirk, so this drops it regardless of which bank
+            # or extraction path - digital or OCR - produced the token).
+            continue
         elif tok:
             acc["narration_parts"].append(tok)
 
