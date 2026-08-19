@@ -89,9 +89,13 @@ _CATEGORY_FONT = {
     "rent": "7C3AED",
     "bounce": FAILED_FONT,
     "upi": "2563EB",
+    "transfer": "0891B2",
     "cash": CHECK_FONT,
     "charges": "64748B",
     "interest": "64748B",
+    "insurance": "0D9488",
+    "investment": "16A34A",
+    "utility": "C2410C",
     "uncategorized": "94A3B8",
 }
 

@@ -28,15 +28,28 @@ UPI = "upi"
 CASH = "cash"
 CHARGES = "charges"
 INTEREST = "interest"
+INSURANCE = "insurance"
+INVESTMENT = "investment"
+UTILITY = "utility"
+TRANSFER = "transfer"
 UNCATEGORIZED = "uncategorized"
 
 # ── Pattern tables ───────────────────────────────────────────────────
 # Each entry: (category, compiled regex, confidence). Checked in order;
 # first match wins. "high" confidence means the narration token is
 # unambiguous on its own (e.g. "SALARY", "EMI"); "medium" means the token is
-# suggestive but shared with adjacent concepts (e.g. a NACH mandate could be
-# an EMI or a SIP/insurance premium - still bucketed as EMI/loan-obligation
-# since that's the common case, but flagged medium not high).
+# suggestive but shared with adjacent concepts (e.g. a bare NACH/mandate
+# token that isn't otherwise identified as insurance or an investment SIP -
+# still bucketed as EMI/loan-obligation since that's the common case, but
+# flagged medium not high).
+#
+# INSURANCE and INVESTMENT are checked *before* EMI specifically because a
+# SIP or insurance premium is also commonly debited via a NACH/ECS mandate -
+# the same token EMI's own regex matches. Left unguarded, that mandate token
+# would swallow both into EMI, which isn't just a labelling error: EMI feeds
+# engine.signals.scoring's FOIR/DSCR debt-service figure directly, and
+# neither a SIP nor an insurance premium is loan debt - miscounting them
+# there inflates a real underwriting number, not just a display label.
 
 _BOUNCE_RE = re.compile(
     r"\b(RETURN(?:ED)?|INSUFFICIENT\s*FUND|CHQ\s*RET|CHEQUE\s*RET|"
@@ -45,15 +58,29 @@ _BOUNCE_RE = re.compile(
     r"(?:CHQ|CHEQUE)\s*UNPAID|UNPAID\s*(?:CHQ|CHEQUE))\b", re.IGNORECASE
 )
 
-_EMI_RE = re.compile(
-    r"\b(EMI|LOAN\s*(?:REPAY|INSTAL|EMI)|NACH[\s-]|ACH[\s-]?(?:DR|DEBIT)|"
-    r"MANDATE|LOAN\s*A/?C|INSTALLMENT|INSTALMENT)\b", re.IGNORECASE
+_SALARY_RE = re.compile(
+    r"\b(SALARY|SAL\s*CREDIT|SAL[\s-]|PAYROLL|WAGES?)\b", re.IGNORECASE
 )
 
 _RENT_RE = re.compile(r"\bRENT\b", re.IGNORECASE)
 
-_SALARY_RE = re.compile(
-    r"\b(SALARY|SAL\s*CREDIT|SAL[\s-]|PAYROLL|WAGES?)\b", re.IGNORECASE
+_INSURANCE_RE = re.compile(
+    r"\b(INSURANCE|PREMIUM|MEDICLAIM|LIC\s|LIFE\s*INSURANCE|"
+    r"HDFC\s*LIFE|ICICI\s*PRU(?:DENTIAL)?\s*LIFE|SBI\s*LIFE|MAX\s*LIFE|"
+    r"TATA\s*AIA|BAJAJ\s*ALLIANZ|STAR\s*HEALTH|"
+    r"POLICY\s*(?:NO|PREMIUM|RENEWAL))\b", re.IGNORECASE
+)
+
+_INVESTMENT_RE = re.compile(
+    r"\b(SIP\b|MUTUAL\s*FUND|SYSTEMATIC\s*INVESTMENT|DEMAT|"
+    r"ZERODHA|GROWW|UPSTOX|COIN\s*BY\s*ZERODHA|"
+    r"NIPPON\s*(?:INDIA\s*)?MF|ICICI\s*PRU(?:DENTIAL)?\s*MF|"
+    r"HDFC\s*MF|SBI\s*MF|AXIS\s*MF|KOTAK\s*MF)\b", re.IGNORECASE
+)
+
+_EMI_RE = re.compile(
+    r"\b(EMI|LOAN\s*(?:REPAY|INSTAL|EMI)|NACH[\s-]|ACH[\s-]?(?:DR|DEBIT)|"
+    r"MANDATE|LOAN\s*A/?C|INSTALLMENT|INSTALMENT)\b", re.IGNORECASE
 )
 
 _INTEREST_CHARGE_RE = re.compile(
@@ -65,10 +92,24 @@ _INTEREST_CHARGE_RE = re.compile(
     r"CHEQUE\s*BOOK\s*CHRG|ATM\s*(?:ANN\.?|ANNUAL)\s*CHRG)\b", re.IGNORECASE
 )
 
+_UTILITY_RE = re.compile(
+    r"\b(ELECTRICITY|MSEB|BESCOM|TATA\s*POWER|ADANI\s*(?:ELECTRICITY|POWER)|"
+    r"WATER\s*BILL|GAS\s*BILL|\bLPG\b|PIPED\s*GAS|"
+    r"DTH\b|BROADBAND|MOBILE\s*(?:BILL|RECHARGE)|(?:PREPAID|POSTPAID)\s*RECHARGE|"
+    r"JIO\b|AIRTEL|VODAFONE|\bVI\s*(?:RECHARGE|BILL)|BSNL|"
+    r"TATASKY|DISH\s*TV|SUN\s*DIRECT|ACT\s*FIBERNET)\b", re.IGNORECASE
+)
+
 _CASH_RE = re.compile(
     r"\b(ATM\s*(?:WDL|WITHDRAW|CASH)?|CASH\s*WDL|CASH\s*DEPOSIT|"
     r"CDM|SELF\s*(?:CHQ|CHEQUE)?|CSH\s*WDL)\b", re.IGNORECASE
 )
+
+# NEFT/RTGS/IMPS are bank-transfer *rails*, same tier as UPI - they identify
+# how money moved, not why, so this sits right before UPI in check order and
+# carries the same "medium", not "high", confidence UPI's narrower cousin
+# (a payment mode, not a purpose) gets.
+_TRANSFER_RE = re.compile(r"\b(NEFT|RTGS|IMPS)\b", re.IGNORECASE)
 
 _UPI_RE = re.compile(r"\bUPI\b", re.IGNORECASE)
 
@@ -88,12 +129,20 @@ def categorize(narration: str) -> tuple:
         return SALARY, "high"
     if _RENT_RE.search(narration):
         return RENT, "high"
+    if _INSURANCE_RE.search(narration):
+        return INSURANCE, "high"
+    if _INVESTMENT_RE.search(narration):
+        return INVESTMENT, "high"
     if _EMI_RE.search(narration):
         return EMI, "medium"
     if _INTEREST_CHARGE_RE.search(narration):
         return CHARGES, "high"
+    if _UTILITY_RE.search(narration):
+        return UTILITY, "medium"
     if _CASH_RE.search(narration):
         return CASH, "medium"
+    if _TRANSFER_RE.search(narration):
+        return TRANSFER, "medium"
     if _UPI_RE.search(narration):
         return UPI, "low"
 
